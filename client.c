@@ -25,13 +25,13 @@ static char pseudo[TAILLE_PSEUDO];
 
 fifo *recu;
 
-fifo* envois[50];
+fifo* envois[50];		//à remplacer par une liste dynamique (à implémenter)
 int nbEnvoi=0;
 
 int saisir_texte(char *chaine, int longueur);
 
 
-void * connexion(void* envoy){
+void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-client
   fifo* envoi=(fifo*)envoy;
   int sock=envoi->sock;
   printf("sock=%i\n",sock);
@@ -43,11 +43,6 @@ void * connexion(void* envoy){
   ssize_t result_read;
   useconds_t timeToSleep=100;
 
-//  char pseudo[TAILLE_PSEUDO];
-
-/*  printf("Choisir un pseudo: ");
-  saisir_texte(pseudo,TAILLE_PSEUDO);
-*/
   //Dis "bonjour !" en envoyant son pseudo
   bzero(trame1.message,TAILLE_MAX_MESSAGE);
   strcpy(trame1.message,pseudo);
@@ -61,7 +56,7 @@ void * connexion(void* envoy){
 
   while(1){
     bzero(trame_read.message,TAILLE_MAX_MESSAGE);
-    timeToSleep=100;
+    timeToSleep=1000;
 
     //Phase lecture
     errno=0;
@@ -78,7 +73,7 @@ void * connexion(void* envoy){
       timeToSleep=1;
       if (trame_read.type_message==hello){
 	strcpy(pseudo_dist,trame_read.message);
-	/*s*/printf(/*datas,*/"%s vient de se connecter \n",pseudo_dist);
+	/*s*/printf(/*datas,*/"%s vient de se connecter \n",pseudo_dist);	//Parties en commentaire à laisser pour une utilisation future
 
       }else if(trame_read.type_message==quit){
 	printf("Fermeture de connexion (en toute tranquillité)\n");
@@ -86,9 +81,9 @@ void * connexion(void* envoy){
 	close(sock);
 	return;
       }else
-	/*s*/printf(/*datas,*/"[%s] %s\n",pseudo_dist,trame_read.message);	//pour une utilisation future
+	/*s*/printf(/*datas,*/"[%s] %s\n",pseudo_dist,trame_read.message);	//Parties en commentaire à laisser pour une utilisation future
 
-      //enfiler_fifo(recu, datas);
+      //enfiler_fifo(recu, datas);						//Parties en commentaire à laisser pour une utilisation future
     }
 
     //Phase écriture
@@ -97,7 +92,6 @@ void * connexion(void* envoy){
       bzero(trame_write.message,TAILLE_MAX_MESSAGE);
       timeToSleep=1;
       defiler_fifo(envoi,trame_write.message);
-      //saisir_texte(trame_write.message,TAILLE_MAX_MESSAGE);
 
       if(0==strcmp("QUIT",trame_write.message))
 	trame_write.type_message=quit;
@@ -114,7 +108,7 @@ void * connexion(void* envoy){
 
 
 
-void connectTO(char *adresse, int port){
+void connectTO(char *adresse, int port){	//Etablit une connexion vers un client attendant
 
  int sock;
  struct sockaddr_in extremite_locale, extremite_distante;
@@ -160,11 +154,11 @@ void connectTO(char *adresse, int port){
     }
    else printf("Echec de connexion a %s %d\n", inet_ntoa(extremite_distante.sin_addr),ntohs(extremite_distante.sin_port));
 
-sleep(1);
+//sleep(1); à supprimer car cette implémentation n'efface plus le port en fin de fonction
 
 }
 
-void * waitConnectFROM(){
+void * waitConnectFROM(){	//Attends d'autres clients pour connexion
 
  int sock;
  struct sockaddr_in extremite_locale, extremite_distante;
@@ -262,7 +256,7 @@ int main(int argc, char ** argv){
 
 
 
-int saisir_texte(char *chaine, int longueur){
+int saisir_texte(char *chaine, int longueur){	//un fgets perso
 
   char *entre=NULL;
 
