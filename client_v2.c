@@ -338,7 +338,7 @@ void send_file(int sock){
 
 	trame_write.type_message=fileTransfert;
 	trame_write.taille=fichier.st_size;
-	strcpy(buffer,tr_to_str(trame_write))
+	strcpy(buffer,tr_to_str(trame_write));
 	write(sock,buffer,sizeof(buffer));
 
 	printf("Je lui envoi la taille du fichier: %d\n", trame_write.taille);
