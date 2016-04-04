@@ -65,9 +65,10 @@ void * connexion(void* socK){
   bzero(trame1.message,TAILLE_MAX_MESSAGE);
   strcpy(trame1.message,pseudo);
   trame1.type_message=hello;
-  trame1.taille=sizeof(trame1);
+  trame1.taille=strlen(trame1.message);
   fcntl(sock,F_SETFL,fcntl(sock,F_GETFL)|O_NONBLOCK);
-  write(sock,(void *)&trame1,trame1.taille);
+  strcpy(buffer,tr_to_str(trame1));
+  write(sock,buffer,sizeof(buffer));
 
 
 
@@ -318,7 +319,7 @@ void send_file(int sock){
 	
 	FILE * file;
 	file=fopen("/promo2018/dgeveaux/Documents/ariane5.mp4", "r");
-	char buffer[TAILLE_MAX_MESSAGE];
+	char buffer[2*TAILLE_MAX_MESSAGE];
 	trame trame_write;
 	struct stat fichier;
 	int nchar=0;
@@ -337,21 +338,24 @@ void send_file(int sock){
 
 	trame_write.type_message=fileTransfert;
 	trame_write.taille=fichier.st_size;
-	write(sock,(void*)&trame_write,sizeof(trame_write));
+	strcpy(buffer,tr_to_str(trame_write))
+	write(sock,buffer,sizeof(buffer));
 
 	printf("Je lui envoi la taille du fichier: %d\n", trame_write.taille);
 
 	bzero(trame_write.message,TAILLE_MAX_MESSAGE);
+	bzero(buffer,2*TAILLE_MAX_MESSAGE);
 
 	while ((nchar=fread(trame_write.message,sizeof(char),TAILLE_MAX_MESSAGE,file))){
 	//	strncpy(trame_write.message,buffer,nchar);
 		printf("J'ai lu: %d caractère \n", nchar);	
 		trame_write.type_message=fileTransfert;
 		trame_write.taille=nchar;
+		strcpy(buffer,tr_to_str(trame_write));
 		size_tot=trame_write.taille+sizeof(trame_write.taille)+sizeof(trame_write.type_message);
 		printf("Type envoyé: %d\n", trame_write.type_message);
 		printf("Je dois envoyer %li \n", (trame_write.taille+sizeof(trame_write.taille)+sizeof(trame_write.type_message)));
-		nwrite=write(sock,(void *)&trame_write,(trame_write.taille+sizeof(trame_write.taille)+sizeof(trame_write.type_message)));
+		nwrite=write(sock,buffer,size_tot);
 		if (nwrite==-1){
 			perror("Erreur write: ");
 		}
