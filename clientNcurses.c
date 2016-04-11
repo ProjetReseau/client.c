@@ -29,8 +29,7 @@ static pthread_cond_t *recu_depile;
 
 fifo *recu;
 
-fifo* envois[50];		//à remplacer par une liste dynamique (à implémenter)
-int nbEnvoi=0;
+liste envois;
 
 int saisir_texte(char *chaine, int longueur);
 
@@ -62,10 +61,10 @@ void regen_win(WINDOW **haut, WINDOW **bas){
 
 
 
+
 void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-client
   fifo* envoi=(fifo*)envoy;
   int sock=envoi->sock;
-  printf("sock=%i\n",sock);
   trame trame_read;
   trame trame_write;
   trame trame1;
@@ -76,7 +75,7 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
 
   //Dis "bonjour !" en envoyant son pseudo
   bzero(trame1.message,TAILLE_MAX_MESSAGE);
-  strcpy(trame1.message,pseudo);
+  strcpy(trame1.message,recu->pseudo);
   trame1.type_message=hello;
   trame1.taille=sizeof(trame1);
   fcntl(sock,F_SETFL,fcntl(sock,F_GETFL)|O_NONBLOCK);
@@ -92,9 +91,10 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
     //Phase lecture
     errno=0;
     if(0==read(sock,(void *)&trame_read,sizeof(trame_read))){
-      printf("Connexion interrompue\n");
-      close(sock);
-      return;
+      sprintf(datas,"Connexion interrompue\n");
+      enfiler_fifo(recu, datas);
+      pthread_cond_signal(recu_depile);
+      break;
     }
     result_read=errno;
 
@@ -103,16 +103,17 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
       bzero(datas,sizeof(datas));
       timeToSleep=1;
       if (trame_read.type_message==hello){
-	strcpy(pseudo_dist,trame_read.message);
-	sprintf(datas,"%s vient de se connecter \n",pseudo_dist);	
+	strcpy(envoi->pseudo,trame_read.message);
+	sprintf(datas,"%s vient de se connecter \n",envoi->pseudo);	
 
       }else if(trame_read.type_message==quit){
 	sprintf(datas,"Fermeture de connexion (en toute tranquillité)\n");
 	write(sock,(void *)&trame_read,trame_read.taille);
-	close(sock);
-	return;
+	enfiler_fifo(recu, datas);
+	pthread_cond_signal(recu_depile);
+	break;
       }else
-	sprintf(datas,"[%s] %s\n",pseudo_dist,trame_read.message);	
+	sprintf(datas,"[%s] %s",envoi->pseudo,trame_read.message);	
 
       enfiler_fifo(recu, datas);
       pthread_cond_signal(recu_depile);
@@ -136,6 +137,12 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
     usleep(timeToSleep);
 
   }
+  sleep(1);
+  supprimer_par_pseudo(&envois,envoi->pseudo);
+  supprimer_fifo(envoi);
+  close(sock);
+  
+  
 }
 
 
@@ -144,7 +151,6 @@ void connectTO(char *adresse, int port){	//Etablit une connexion vers un client 
 
  int sock;
  struct sockaddr_in extremite_locale, extremite_distante;
- socklen_t length = sizeof(struct sockaddr_in);
  struct hostent *hote_distant;
  fifo *envoy;
 
@@ -166,8 +172,11 @@ void connectTO(char *adresse, int port){	//Etablit une connexion vers un client 
 
 
    if ((hote_distant=gethostbyname(adresse))==(struct hostent *)NULL){
-	fprintf(stderr, "chat:unknown host: %s\n", *adresse);
-	exit(EXIT_FAILURE);
+	char reponse[BUFSIZ];
+	sprintf(reponse, "chat : hôte inconnu : %s", adresse);
+	enfiler_fifo(recu,reponse);
+	pthread_cond_signal(recu_depile);
+	return;
    }
 
    bzero((char *)&extremite_distante, sizeof(extremite_distante));
@@ -179,12 +188,17 @@ void connectTO(char *adresse, int port){	//Etablit une connexion vers un client 
    if (connect(sock, (struct sockaddr *)&extremite_distante,sizeof(extremite_distante))==0){// On essaye de se connecter à un client distant
       envoy=creer_fifo();
       envoy->sock=sock;
-      envois[nbEnvoi]=envoy;
-      nbEnvoi++;
+      ajouter_liste(&envois,envoy);
+
     pthread_create(&th,NULL,connexion,(void*) envoy);
 
     }
-   else printf("Echec de connexion a %s %d\n", inet_ntoa(extremite_distante.sin_addr),ntohs(extremite_distante.sin_port));
+   else{
+     char reponse[BUFSIZ];
+     sprintf(reponse,"Echec de connexion a %s %d\n", inet_ntoa(extremite_distante.sin_addr),ntohs(extremite_distante.sin_port));
+     	enfiler_fifo(recu,reponse);
+	pthread_cond_signal(recu_depile);
+  }
 
 //sleep(1); à supprimer car cette implémentation n'efface plus le port en fin de fonction
 
@@ -195,7 +209,6 @@ void * waitConnectFROM(){	//Attends d'autres clients pour connexion
  int sock;
  struct sockaddr_in extremite_locale, extremite_distante;
  socklen_t length = sizeof(struct sockaddr_in);
- struct hostent *hote_distant;
  fifo *envoy;
 
 
@@ -244,8 +257,8 @@ void * waitConnectFROM(){	//Attends d'autres clients pour connexion
 
     envoy=creer_fifo();
     envoy->sock=ear;
-    envois[nbEnvoi]=envoy;
-    nbEnvoi++;
+    ajouter_liste(&envois,envoy);
+    
 
    pthread_create(&th,NULL,connexion,(void*) envoy);
 
@@ -281,20 +294,43 @@ void * recive(void *haut){
 }
 
 
+void envoi_a_tous(char* message){
+  
+  liste_elmt* current;
+  int i;
+  
+   current=envois.premier;
+	
+    for(i=0;i<envois.taille;i++){
+      enfiler_fifo(current->file, message);
+      current=current->suiv;
+      
+    }
+  
+}
+
 
 int main(int argc, char ** argv){
 
   recu=creer_fifo();
+  fifo* fifo_recherche;
   recu_depile=malloc(sizeof(pthread_cond_t));
   pthread_cond_init(recu_depile, NULL);
+  envois.mutex_liste=malloc(sizeof(pthread_mutex_t));
+  pthread_mutex_init(envois.mutex_liste,NULL);
+  
   char datas[TAILLE_MAX_MESSAGE];
+  char datas2[TAILLE_MAX_MESSAGE+TAILLE_PSEUDO+32];
+  char arg1[TAILLE_PSEUDO];
   int agc;
   int i;
   WINDOW *haut, *bas;
 
 
   printf("Choisir un pseudo: ");
-  saisir_texte(pseudo,TAILLE_PSEUDO);
+  saisir_texte(recu->pseudo,TAILLE_PSEUDO);
+  envois.taille=0;
+  envois.premier=NULL;
 
 
 
@@ -317,17 +353,49 @@ int main(int argc, char ** argv){
 
   pthread_create(&th,NULL,waitConnectFROM,NULL);
 
-  while (strcmp((char*) &datas, "QUIT")){
+  while (1){
     
     bzero(datas,TAILLE_MAX_MESSAGE);
 
     if (KEY_RESIZE!=mvwgetstr(bas, 0, 0, (char*) &datas)){
-
-	for(i=0;i<nbEnvoi;i++)
-	  enfiler_fifo(envois[i], datas);
+      
+      if(datas[0]=='/'){
 	
-	enfiler_fifo(recu, datas);
-	pthread_cond_signal(recu_depile);
+	if(0==strncasecmp("/quit",datas,5)){
+	  envoi_a_tous("QUIT");
+	  sleep(1);
+	  exit(0);
+	}else if(0==strncasecmp("/me",datas,3)){
+	  sprintf(datas2,"Votre pseudo est %s",recu->pseudo);
+	  
+	}else if(0==strncasecmp("/connect",datas,8)){  
+	  arg1[0]='\0';
+	  *datas2='\0';
+	  sscanf(datas,"%*s %s %s",arg1,datas2);
+	  connectTO(arg1,atoi(datas2));
+	  *datas2='\0';
+	  
+	}else if(0==strncasecmp("/mp",datas,3)){
+	  sscanf(datas,"%*s %s",arg1);
+	  if(!rechercher_par_pseudo(&envois,arg1, &fifo_recherche)){
+	    sprintf(datas2,"%s : pseudo non trouvé",arg1);
+	  }else{
+	    enfiler_fifo(fifo_recherche,datas+5+strlen(arg1));
+	    sprintf(datas2,"[VOUS->%s] %s",arg1,datas+5+strlen(arg1));
+	    
+	  }
+	  
+	}else
+	  sprintf(datas2,"La commande %s est inconnue.",datas);
+      }else{
+	
+	envoi_a_tous(datas);
+	
+	sprintf(datas2,"[VOUS] %s",datas);
+      }
+      
+      enfiler_fifo(recu, datas2);
+      pthread_cond_signal(recu_depile);
     }
 
     werase(bas);
