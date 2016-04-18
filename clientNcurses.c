@@ -33,7 +33,12 @@ liste envois;
 
 int saisir_texte(char *chaine, int longueur);
 
-
+void affichier_haut(char* datas){
+  
+      enfiler_fifo(recu, datas);
+      pthread_cond_signal(recu_depile);
+  
+}
 
 void dessine_box(void){
 
@@ -65,10 +70,10 @@ void regen_win(WINDOW **haut, WINDOW **bas){
 void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-client
   fifo* envoi=(fifo*)envoy;
   int sock=envoi->sock;
+  int taille;
   trame trame_read;
   trame trame_write;
   trame trame1;
-  char pseudo_dist[TAILLE_PSEUDO];
   char datas[TAILLE_MAX_MESSAGE+32];
   ssize_t result_read;
   useconds_t timeToSleep=100;
@@ -79,7 +84,9 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
   trame1.type_message=hello;
   trame1.taille=sizeof(trame1);
   fcntl(sock,F_SETFL,fcntl(sock,F_GETFL)|O_NONBLOCK);
-  write(sock,(void *)&trame1,trame1.taille);
+  
+  tr_to_str(datas,trame1);
+  write(sock,datas,TAILLE_MAX_MESSAGE+32);
 
 
 
@@ -90,33 +97,30 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
 
     //Phase lecture
     errno=0;
-    if(0==read(sock,(void *)&trame_read,sizeof(trame_read))){
+    if(0==read(sock,datas,TAILLE_MAX_MESSAGE+32)){
       sprintf(datas,"Connexion interrompue\n");
-      enfiler_fifo(recu, datas);
-      pthread_cond_signal(recu_depile);
+      affichier_haut(datas);
       break;
     }
     result_read=errno;
 
 
     if ((result_read != EWOULDBLOCK)&&(result_read != EAGAIN)){
-      bzero(datas,sizeof(datas));
+      str_to_tr(datas,&trame_read);
       timeToSleep=1;
       if (trame_read.type_message==hello){
 	strcpy(envoi->pseudo,trame_read.message);
 	sprintf(datas,"%s vient de se connecter \n",envoi->pseudo);	
 
       }else if(trame_read.type_message==quit){
+	write(sock,datas,TAILLE_MAX_MESSAGE+32);
 	sprintf(datas,"Fermeture de connexion (en toute tranquillité)\n");
-	write(sock,(void *)&trame_read,trame_read.taille);
-	enfiler_fifo(recu, datas);
-	pthread_cond_signal(recu_depile);
+	affichier_haut(datas);
 	break;
       }else
 	sprintf(datas,"[%s] %s",envoi->pseudo,trame_read.message);	
 
-      enfiler_fifo(recu, datas);
-      pthread_cond_signal(recu_depile);
+      affichier_haut(datas);
     }
 
     //Phase écriture
@@ -131,7 +135,8 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
       else
 	trame_write.type_message=texte;
       trame_write.taille=sizeof(trame_write);
-      write(sock,(void *)&trame_write,trame_write.taille);
+      tr_to_str(datas,trame_write);
+      write(sock,datas,TAILLE_MAX_MESSAGE+32);
     }
 
     usleep(timeToSleep);
@@ -174,8 +179,7 @@ void connectTO(char *adresse, int port){	//Etablit une connexion vers un client 
    if ((hote_distant=gethostbyname(adresse))==(struct hostent *)NULL){
 	char reponse[BUFSIZ];
 	sprintf(reponse, "chat : hôte inconnu : %s", adresse);
-	enfiler_fifo(recu,reponse);
-	pthread_cond_signal(recu_depile);
+	affichier_haut(reponse);
 	return;
    }
 
@@ -196,8 +200,7 @@ void connectTO(char *adresse, int port){	//Etablit une connexion vers un client 
    else{
      char reponse[BUFSIZ];
      sprintf(reponse,"Echec de connexion a %s %d\n", inet_ntoa(extremite_distante.sin_addr),ntohs(extremite_distante.sin_port));
-     	enfiler_fifo(recu,reponse);
-	pthread_cond_signal(recu_depile);
+	affichier_haut(reponse);
   }
 
 //sleep(1); à supprimer car cette implémentation n'efface plus le port en fin de fonction
@@ -234,8 +237,7 @@ void * waitConnectFROM(){	//Attends d'autres clients pour connexion
 
  char datas[200];
  sprintf(datas,"Ouverture d'une socket (n°%i) sur le port %i on mode connecté\n", sock, ntohs(extremite_locale.sin_port));
- enfiler_fifo(recu,datas);
- pthread_cond_signal(recu_depile);
+ affichier_haut(datas);
  //printf("extremite locale :\n sin_family = %d\n sin_addr.s_addr = %s\n sin_port = %d\n\n", extremite_locale.sin_family, inet_ntoa(extremite_locale.sin_addr), ntohs(extremite_locale.sin_port));
 
   //printf("En attente de connexion.........\n");
@@ -335,6 +337,7 @@ int main(int argc, char ** argv){
 
 
   initscr();
+  atexit(&endwin);
 
   haut= subwin(stdscr, LINES-7,COLS-2, 1, 1);
   bas= subwin(stdscr, 4,COLS-2, LINES-5, 1);
@@ -394,8 +397,7 @@ int main(int argc, char ** argv){
 	sprintf(datas2,"[VOUS] %s",datas);
       }
       
-      enfiler_fifo(recu, datas2);
-      pthread_cond_signal(recu_depile);
+      affichier_haut(datas2);
     }
 
     werase(bas);
