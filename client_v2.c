@@ -53,7 +53,7 @@ void * connexion(void* socK){
   trame1.type_message=hello;
   trame1.taille=strlen(trame1.message);
   fcntl(sock,F_SETFL,fcntl(sock,F_GETFL)|O_NONBLOCK);
-  strcpy(buffer,tr_to_str(trame1));
+  tr_to_str(buffer,trame1);
   write(sock,buffer,trame1.taille+8);
 
 
@@ -88,6 +88,7 @@ void * connexion(void* socK){
 	exit(EXIT_FAILURE);
       }
 	else if (trame_read.type_message==fileTransfert){
+	        printf("Debut trame: %s\n", test);
 		receive_file(trame_read,nchar);
      	}
 	else { 
@@ -120,7 +121,7 @@ void * connexion(void* socK){
 	trame_write.taille=strlen(trame_write.message);
 	printf("Taille message: %d\n", trame_write.taille);
 	printf("Type message envoyé: %d\n", trame_write.type_message);
-	strcpy(buffer,tr_to_str(trame_write));
+	tr_to_str(buffer, trame_write);
 	write(sock,buffer,TAILLE_MAX_MESSAGE+8);
     }
     
@@ -285,7 +286,7 @@ int saisir_texte(char *chaine, int longueur){
 void send_file(int sock){
 	
 	FILE * file;
-	file=fopen("/home/damien/Documents/anssi.png","r");//("/promo2018/dgeveaux/Documents/ariane5.mp4", "r");
+	file=fopen/*("/home/damien/Documents/anssi.png","r");*/("/promo2018/dgeveaux/Documents/France.png", "r");
 	char buffer[TAILLE_MAX_MESSAGE+8];
 	trame trame_write;
 	struct stat fichier;
@@ -293,20 +294,19 @@ void send_file(int sock){
 	int nwrite=0;
 	int size_tot=0;
 	int data_send=0;
-	char *tmp=NULL;
 
 	if (file==NULL){
 		printf("Erreur fopen\n");
 		exit(EXIT_FAILURE);
 	}
 
-	lstat("/home/damien/Documents/anssi.png",&fichier);//"/promo2018/dgeveaux/Documents/ariane5.mp4",&fichier); 
+	lstat(/*"/home/damien/Documents/anssi.png",&fichier);*/"/promo2018/dgeveaux/Documents/France.png",&fichier); 
 
 	printf("We are in send_file ;) \n");
 
 	trame_write.type_message=fileTransfert;
 	trame_write.taille=fichier.st_size;
-	strcpy(buffer,tr_to_str(trame_write));
+	tr_to_str(buffer,trame_write);
 	write(sock,buffer,sizeof(trame_write));
 
 	printf("Je lui envoi la taille du fichier: %d\n", trame_write.taille);
@@ -315,17 +315,17 @@ void send_file(int sock){
 	bzero(buffer,TAILLE_MAX_MESSAGE+8);
 
 	while ((nchar=fread(trame_write.message,sizeof(char),TAILLE_MAX_MESSAGE,file))){
-		tmp=calloc(nchar+8,sizeof(char));
+	//	tmp=calloc(nchar+8,sizeof(char));
 	//	strncpy(trame_write.message,buffer,nchar);
 		printf("J'ai lu: %d caractère \n", nchar);	
 		trame_write.type_message=fileTransfert;
 		trame_write.taille=nchar;
 		//strcpy(buffer,tr_to_str(trame_write));
-		tmp=tr_to_str(trame_write);
+		tr_to_str(buffer,trame_write);
 		size_tot=trame_write.taille+sizeof(trame_write.taille)+sizeof(trame_write.type_message);
 		printf("Type envoyé: %d\n", trame_write.type_message);
 		printf("Je dois envoyer %li \n", (trame_write.taille+sizeof(trame_write.taille)+sizeof(trame_write.type_message)));
-		nwrite=write(sock,tmp,size_tot);
+		nwrite=write(sock,buffer,size_tot);
 		if (nwrite==-1){
 			perror("Erreur write: ");
 		}
@@ -340,7 +340,7 @@ void send_file(int sock){
 		sleep(1);
 		bzero(buffer,TAILLE_MAX_MESSAGE);
 		bzero(trame_write.message,TAILLE_MAX_MESSAGE);
-		free(tmp);	
+	//	free(tmp);	
 	}
 	printf("Fichier envoyé\n");	
 	fclose(file);
@@ -354,8 +354,12 @@ void receive_file(trame trame_read, int nchar){
   static int taille_re=0;
   int taille_w=0;
   static int taille_w2=0;
+  static int ouvert=0;
 
-  dest=fopen("./res","w");
+  if (!ouvert){
+	  dest=fopen("./res","w");
+	  ouvert=1;
+  }
 
   if (dest==NULL){
   	printf("Erreur open\n");
@@ -383,6 +387,7 @@ void receive_file(trame trame_read, int nchar){
 	taille_re=0;
 	taille_w2=0;
 	ok=0;
+	ouvert=0;
   }
 
 }
