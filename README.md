@@ -1,7 +1,7 @@
 # client.c
 Code source du client. Nécessite les fichiers de Protocole et de File.
 
-
+* **18/04/2016** :Ajout du support du protocole définit dans `protocole.c` (avant on envoyait directement la trame).
 * **11/04/2016** : ajout de beaucoup de choses dans clientNcurses.c :
   1. Ajout d'une liste dynamique (_envois_) pour gérer toutes les connexions
   2. sachant qu'il y a 1 file/connexion, la tête de file contient le pseudo. La file _recu_ (qui permet en fait d'écrire sur l'écran) contient le pseudo de l'utilisateur.
