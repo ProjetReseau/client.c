@@ -33,7 +33,12 @@ liste envois;
 
 int saisir_texte(char *chaine, int longueur);
 
-
+void affichier_haut(char* datas){
+  
+      enfiler_fifo(recu, datas);
+      pthread_cond_signal(recu_depile);
+  
+}
 
 void dessine_box(void){
 
@@ -94,8 +99,7 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
     errno=0;
     if(0==read(sock,datas,TAILLE_MAX_MESSAGE+32)){
       sprintf(datas,"Connexion interrompue\n");
-      enfiler_fifo(recu, datas);
-      pthread_cond_signal(recu_depile);
+      affichier_haut(datas);
       break;
     }
     result_read=errno;
@@ -111,14 +115,12 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
       }else if(trame_read.type_message==quit){
 	write(sock,datas,TAILLE_MAX_MESSAGE+32);
 	sprintf(datas,"Fermeture de connexion (en toute tranquillité)\n");
-	enfiler_fifo(recu, datas);
-	pthread_cond_signal(recu_depile);
+	affichier_haut(datas);
 	break;
       }else
 	sprintf(datas,"[%s] %s",envoi->pseudo,trame_read.message);	
 
-      enfiler_fifo(recu, datas);
-      pthread_cond_signal(recu_depile);
+      affichier_haut(datas);
     }
 
     //Phase écriture
@@ -177,8 +179,7 @@ void connectTO(char *adresse, int port){	//Etablit une connexion vers un client 
    if ((hote_distant=gethostbyname(adresse))==(struct hostent *)NULL){
 	char reponse[BUFSIZ];
 	sprintf(reponse, "chat : hôte inconnu : %s", adresse);
-	enfiler_fifo(recu,reponse);
-	pthread_cond_signal(recu_depile);
+	affichier_haut(reponse);
 	return;
    }
 
@@ -199,8 +200,7 @@ void connectTO(char *adresse, int port){	//Etablit une connexion vers un client 
    else{
      char reponse[BUFSIZ];
      sprintf(reponse,"Echec de connexion a %s %d\n", inet_ntoa(extremite_distante.sin_addr),ntohs(extremite_distante.sin_port));
-     	enfiler_fifo(recu,reponse);
-	pthread_cond_signal(recu_depile);
+	affichier_haut(reponse);
   }
 
 //sleep(1); à supprimer car cette implémentation n'efface plus le port en fin de fonction
@@ -237,8 +237,7 @@ void * waitConnectFROM(){	//Attends d'autres clients pour connexion
 
  char datas[200];
  sprintf(datas,"Ouverture d'une socket (n°%i) sur le port %i on mode connecté\n", sock, ntohs(extremite_locale.sin_port));
- enfiler_fifo(recu,datas);
- pthread_cond_signal(recu_depile);
+ affichier_haut(datas);
  //printf("extremite locale :\n sin_family = %d\n sin_addr.s_addr = %s\n sin_port = %d\n\n", extremite_locale.sin_family, inet_ntoa(extremite_locale.sin_addr), ntohs(extremite_locale.sin_port));
 
   //printf("En attente de connexion.........\n");
@@ -398,8 +397,7 @@ int main(int argc, char ** argv){
 	sprintf(datas2,"[VOUS] %s",datas);
       }
       
-      enfiler_fifo(recu, datas2);
-      pthread_cond_signal(recu_depile);
+      affichier_haut(datas2);
     }
 
     werase(bas);
@@ -433,6 +431,7 @@ int saisir_texte(char *chaine, int longueur){	//un fgets perso
   }
   else return 0;
 }
+
 
 
 
