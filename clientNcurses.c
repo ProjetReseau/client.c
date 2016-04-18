@@ -65,10 +65,10 @@ void regen_win(WINDOW **haut, WINDOW **bas){
 void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-client
   fifo* envoi=(fifo*)envoy;
   int sock=envoi->sock;
+  int taille;
   trame trame_read;
   trame trame_write;
   trame trame1;
-  char pseudo_dist[TAILLE_PSEUDO];
   char datas[TAILLE_MAX_MESSAGE+32];
   ssize_t result_read;
   useconds_t timeToSleep=100;
@@ -79,7 +79,9 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
   trame1.type_message=hello;
   trame1.taille=sizeof(trame1);
   fcntl(sock,F_SETFL,fcntl(sock,F_GETFL)|O_NONBLOCK);
-  write(sock,(void *)&trame1,trame1.taille);
+  
+  tr_to_str(datas,trame1);
+  write(sock,datas,TAILLE_MAX_MESSAGE+32);
 
 
 
@@ -90,7 +92,7 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
 
     //Phase lecture
     errno=0;
-    if(0==read(sock,(void *)&trame_read,sizeof(trame_read))){
+    if(0==read(sock,datas,TAILLE_MAX_MESSAGE+32)){
       sprintf(datas,"Connexion interrompue\n");
       enfiler_fifo(recu, datas);
       pthread_cond_signal(recu_depile);
@@ -100,15 +102,15 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
 
 
     if ((result_read != EWOULDBLOCK)&&(result_read != EAGAIN)){
-      bzero(datas,sizeof(datas));
+      str_to_tr(datas,&trame_read);
       timeToSleep=1;
       if (trame_read.type_message==hello){
 	strcpy(envoi->pseudo,trame_read.message);
 	sprintf(datas,"%s vient de se connecter \n",envoi->pseudo);	
 
       }else if(trame_read.type_message==quit){
+	write(sock,datas,TAILLE_MAX_MESSAGE+32);
 	sprintf(datas,"Fermeture de connexion (en toute tranquillité)\n");
-	write(sock,(void *)&trame_read,trame_read.taille);
 	enfiler_fifo(recu, datas);
 	pthread_cond_signal(recu_depile);
 	break;
@@ -131,7 +133,8 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
       else
 	trame_write.type_message=texte;
       trame_write.taille=sizeof(trame_write);
-      write(sock,(void *)&trame_write,trame_write.taille);
+      tr_to_str(datas,trame_write);
+      write(sock,datas,TAILLE_MAX_MESSAGE+32);
     }
 
     usleep(timeToSleep);
@@ -335,6 +338,7 @@ int main(int argc, char ** argv){
 
 
   initscr();
+  atexit(&endwin);
 
   haut= subwin(stdscr, LINES-7,COLS-2, 1, 1);
   bas= subwin(stdscr, 4,COLS-2, LINES-5, 1);
@@ -429,7 +433,6 @@ int saisir_texte(char *chaine, int longueur){	//un fgets perso
   }
   else return 0;
 }
-
 
 
 
