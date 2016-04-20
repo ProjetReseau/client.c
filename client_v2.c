@@ -29,6 +29,7 @@ fifo *recu,*envoi;
 int saisir_texte(char *chaine, int longueur);
 void send_file(int sock);
 void receive_file(trame trame_read, int nchar);
+void recup_nom(char *chemin, char* nom);
 
 void * connexion(void* socK){
   int sock=*((int*)socK);
@@ -88,7 +89,6 @@ void * connexion(void* socK){
 	exit(EXIT_FAILURE);
       }
 	else if (trame_read.type_message==fileTransfert){
-	        printf("Debut trame: %s\n", test);
 		receive_file(trame_read,nchar);
      	}
 	else { 
@@ -286,7 +286,8 @@ int saisir_texte(char *chaine, int longueur){
 void send_file(int sock){
 	
 	FILE * file;
-	file=fopen/*("/home/damien/Documents/anssi.png","r");*/("/promo2018/dgeveaux/Documents/France.png", "r");
+	char chemin[]="/promo2018/dgeveaux/Documents/France.png";
+	char nom[30];
 	char buffer[TAILLE_MAX_MESSAGE+8];
 	trame trame_write;
 	struct stat fichier;
@@ -295,17 +296,22 @@ void send_file(int sock){
 	int size_tot=0;
 	int data_send=0;
 
+	file=fopen/*("/home/damien/Documents/anssi.png","r");*/(chemin, "r");
+
 	if (file==NULL){
 		printf("Erreur fopen\n");
 		exit(EXIT_FAILURE);
 	}
 
-	lstat(/*"/home/damien/Documents/anssi.png",&fichier);*/"/promo2018/dgeveaux/Documents/France.png",&fichier); 
+	lstat(/*"/home/damien/Documents/anssi.png",&fichier);*/chemin,&fichier); 
 
 	printf("We are in send_file ;) \n");
 
+	recup_nom(chemin,nom);
+
 	trame_write.type_message=fileTransfert;
-	trame_write.taille=fichier.st_size;
+	sprintf(trame_write.message,"%i %s", fichier.st_size, nom);
+	trame_write.taille=strlen(trame_write.message);
 	tr_to_str(buffer,trame_write);
 	write(sock,buffer,sizeof(trame_write));
 
@@ -349,7 +355,7 @@ void send_file(int sock){
 
 void receive_file(trame trame_read, int nchar){
 
-  FILE *dest=NULL;
+  static  FILE *dest=NULL;
   static int ok=0;
   static int taille_re=0;
   int taille_w=0;
@@ -389,5 +395,23 @@ void receive_file(trame trame_read, int nchar){
 	ok=0;
 	ouvert=0;
   }
+
+}
+
+void recup_nom(char *chemin, char *nom){
+	
+  char *ptr=NULL;
+
+  ptr=strchr(chemin,'.');
+
+  if (ptr==NULL){
+	printf("Chemin invalide\n");
+  }
+
+  while (*(ptr-1)!='/'){
+	ptr--;
+  }
+
+  strcpy(nom,ptr);
 
 }
