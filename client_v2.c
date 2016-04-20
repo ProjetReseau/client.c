@@ -28,7 +28,7 @@ fifo *recu,*envoi;
 
 int saisir_texte(char *chaine, int longueur);
 void send_file(int sock);
-void receive_file(trame trame_read, int nchar);
+void receive_file(trame trame_read, int nchar, int taille_fichier, char *nom);
 void recup_nom(char *chemin, char* nom);
 
 void * connexion(void* socK){
@@ -41,7 +41,9 @@ void * connexion(void* socK){
   ssize_t result_read;
   useconds_t timeToSleep=100;
   int nchar=0;
-  char buffer[TAILLE_MAX_MESSAGE+8];
+  char buffer[2*TAILLE_MAX_MESSAGE+32];
+  char name_file_r[30];
+  int taille_file_r;
 
 //  char pseudo[TAILLE_PSEUDO];
 
@@ -89,8 +91,13 @@ void * connexion(void* socK){
 	exit(EXIT_FAILURE);
       }
 	else if (trame_read.type_message==fileTransfert){
-		receive_file(trame_read,nchar);
+		receive_file(trame_read,nchar,taille_file_r,name_file_r);
      	}
+	else if (trame_read.type_message==fileProposition){
+		sscanf(trame_read.message,"%i %s", &taille_file_r, name_file_r);
+		printf("Taille a recevoir %i\n", taille_file_r);
+		printf("Nom fichier à recevoir: %s\n", name_file_r);
+	}
 	else { 
 		printf("Reception d'un message texte\n");
 	/*s*/printf(/*datas,*/"[%s] %s\n",pseudo_dist,trame_read.message);	//pour une utilisation future
@@ -136,7 +143,7 @@ void connectTO(char *adresse, int port){
 
  int sock;
  struct sockaddr_in extremite_locale, extremite_distante;
- socklen_t length = sizeof(struct sockaddr_in);
+ //socklen_t length = sizeof(struct sockaddr_in);
  struct hostent *hote_distant;
 
  sock=socket(AF_INET, SOCK_STREAM, 0);
@@ -286,7 +293,7 @@ int saisir_texte(char *chaine, int longueur){
 void send_file(int sock){
 	
 	FILE * file;
-	char chemin[]="/promo2018/dgeveaux/Documents/France.png";
+	char chemin[]="/home/damien/Documents/anssi.png"; //"/promo2018/dgeveaux/Documents/France.png";
 	char nom[30];
 	char buffer[TAILLE_MAX_MESSAGE+8];
 	trame trame_write;
@@ -309,13 +316,13 @@ void send_file(int sock){
 
 	recup_nom(chemin,nom);
 
-	trame_write.type_message=fileTransfert;
-	sprintf(trame_write.message,"%i %s", fichier.st_size, nom);
+	trame_write.type_message=fileProposition;
+	sprintf(trame_write.message,"%i %s", (int)fichier.st_size, nom);
 	trame_write.taille=strlen(trame_write.message);
 	tr_to_str(buffer,trame_write);
-	write(sock,buffer,sizeof(trame_write));
+	write(sock,buffer,strlen(buffer));
 
-	printf("Je lui envoi la taille du fichier: %d\n", trame_write.taille);
+	//printf("Je lui envoi la taille du fichier: %d\n", trame_write.taille);
 
 	bzero(trame_write.message,TAILLE_MAX_MESSAGE);
 	bzero(buffer,TAILLE_MAX_MESSAGE+8);
@@ -353,17 +360,19 @@ void send_file(int sock){
 
 }
 
-void receive_file(trame trame_read, int nchar){
+void receive_file(trame trame_read, int nchar, int taille_fichier, char * nom){
 
   static  FILE *dest=NULL;
-  static int ok=0;
-  static int taille_re=0;
+  int taille_re=taille_fichier;
   int taille_w=0;
   static int taille_w2=0;
   static int ouvert=0;
+  char chemin_dest[50];
+
+  sprintf(chemin_dest,"/home/damien/Téléchargements/%s",nom);
 
   if (!ouvert){
-	  dest=fopen("./res","w");
+	  dest=fopen(chemin_dest,"w");
 	  ouvert=1;
   }
 
@@ -374,16 +383,16 @@ void receive_file(trame trame_read, int nchar){
 
   printf("Reception d'un file ....\n");
 
-  if (!ok){
+ /* if (!ok){
   	taille_re=trame_read.taille;
   	printf("Le fichier a recevoir taille: %d\n",taille_re);
   	ok=1;
   }
-  else {
+  else {*/
   	taille_w=fwrite(trame_read.message,sizeof(char),(nchar-sizeof(trame_read.type_message)-sizeof(trame_read.type_message)),dest);
   	printf("J'ai ecris %d dans dest\n", taille_w);
   	taille_w2+=taille_w;
-  }
+ // }
 
   printf("Taille actuelle du fichier dest: %d\n", taille_w2);
 
@@ -392,7 +401,6 @@ void receive_file(trame trame_read, int nchar){
   	printf("Fichier dest ferme\n");
 	taille_re=0;
 	taille_w2=0;
-	ok=0;
 	ouvert=0;
   }
 
@@ -402,7 +410,7 @@ void recup_nom(char *chemin, char *nom){
 	
   char *ptr=NULL;
 
-  ptr=strchr(chemin,'.');
+  ptr=strchr(chemin,'\0');
 
   if (ptr==NULL){
 	printf("Chemin invalide\n");
