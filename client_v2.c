@@ -60,13 +60,12 @@ void * connexion(void* socK){
   write(sock,buffer,trame1.taille+8);
 
 
-
   while(1){
     bzero(trame_read.message,TAILLE_MAX_MESSAGE);
     timeToSleep=100;
     
     //Phase lecture
-    errno=0;
+   errno=0;
     if((nchar=read(sock,buffer,(TAILLE_MAX_MESSAGE+8)))==0){
       printf("Connexion interrompue\n");
       close(sock);
@@ -74,12 +73,16 @@ void * connexion(void* socK){
     }
     result_read=errno;
 
+
     str_to_tr(buffer,&trame_read);
 
     if ((result_read != EWOULDBLOCK)&&(result_read != EAGAIN)){
       bzero(datas,sizeof(datas));
       timeToSleep=1;
       printf("Type reçu: %d\n", trame_read.type_message);
+
+      printf("Paquet à la réception: %s\n", buffer);
+
       if (trame_read.type_message==hello){
 	strcpy(pseudo_dist,trame_read.message);
 	/*s*/printf(/*datas,*/"%s vient de se connecter \n",pseudo_dist);
@@ -91,7 +94,7 @@ void * connexion(void* socK){
 	exit(EXIT_FAILURE);
       }
 	else if (trame_read.type_message==fileTransfert){
-		receive_file(trame_read,nchar,taille_file_r,name_file_r);
+		receive_file(trame_read,trame_read.taille,taille_file_r,name_file_r);
      	}
 	else if (trame_read.type_message==fileProposition){
 		sscanf(trame_read.message,"%i %s", &taille_file_r, name_file_r);
@@ -293,9 +296,9 @@ int saisir_texte(char *chaine, int longueur){
 void send_file(int sock){
 	
 	FILE * file;
-	char chemin[]="/home/damien/Documents/anssi.png"; //"/promo2018/dgeveaux/Documents/France.png";
+	char chemin[]=/*"/home/damien/Documents/anssi.png"; */"/promo2018/dgeveaux/Documents/ariane5.mp4";
 	char nom[30];
-	char buffer[TAILLE_MAX_MESSAGE+8];
+	char buffer[TAILLE_MAX_MESSAGE+32];
 	trame trame_write;
 	struct stat fichier;
 	int nchar=0;
@@ -350,8 +353,8 @@ void send_file(int sock){
 		printf("J'ai écrit %d\n", nwrite);
 		printf("Taille totale envoyee: %d\n", data_send);
 		printf("Message en cours ....\n");
-		sleep(1);
-		bzero(buffer,TAILLE_MAX_MESSAGE);
+		sleep(2);
+		bzero(buffer,TAILLE_MAX_MESSAGE+32);
 		bzero(trame_write.message,TAILLE_MAX_MESSAGE);
 	//	free(tmp);	
 	}
@@ -369,7 +372,7 @@ void receive_file(trame trame_read, int nchar, int taille_fichier, char * nom){
   static int ouvert=0;
   char chemin_dest[50];
 
-  sprintf(chemin_dest,"/home/damien/Téléchargements/%s",nom);
+  sprintf(chemin_dest,"./%s",nom);
 
   if (!ouvert){
 	  dest=fopen(chemin_dest,"w");
@@ -389,7 +392,7 @@ void receive_file(trame trame_read, int nchar, int taille_fichier, char * nom){
   	ok=1;
   }
   else {*/
-  	taille_w=fwrite(trame_read.message,sizeof(char),(nchar-sizeof(trame_read.type_message)-sizeof(trame_read.type_message)),dest);
+  	taille_w=fwrite(trame_read.message,sizeof(char),nchar,dest);
   	printf("J'ai ecris %d dans dest\n", taille_w);
   	taille_w2+=taille_w;
  // }
