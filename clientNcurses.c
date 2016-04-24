@@ -370,14 +370,14 @@ void * recive(void *haut){
   
   pthread_mutex_t *mutex=malloc(sizeof(pthread_mutex_t));
   pthread_mutex_init(mutex,NULL);
-  char datas[TAILLE_MAX_MESSAGE+32];
+  char datas[TAILLE_MAX_MESSAGE+TAILLE_PSEUDO+32];
     
   while(1){
 
     pthread_cond_wait (recu_depile,mutex);
 
     while(!(estVide_fifo(recu))){
-    
+      bzero(datas,TAILLE_MAX_MESSAGE+TAILLE_PSEUDO+32);
       defiler_fifo(recu, datas);
       wprintw(haut,"%s\n",datas);
       
