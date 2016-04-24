@@ -27,7 +27,7 @@ static char pseudo[TAILLE_PSEUDO];
 static pthread_t th;
 static pthread_cond_t *recu_depile;
 
-fifo *recu;
+fifo *recu, *serveur;
 
 liste envois;
 
@@ -64,13 +64,93 @@ void regen_win(WINDOW **haut, WINDOW **bas){
 }
 
 
+void connexion_serveur(fifo* envoi){
+  
+  int sock=envoi->sock;
+  serveur=envoi;
+  trame trame_read;
+  trame trame_write;
+  char datas[TAILLE_MAX_MESSAGE+32];
+  ssize_t result_read;
+  useconds_t timeToSleep=100;
+  
+  affichier_haut("Connecté au serveur d'annuaire.\n");
+  
+  while(1){
+    bzero(trame_read.message,TAILLE_MAX_MESSAGE);
+    timeToSleep=1000;
 
+    //Phase lecture
+    errno=0;
+    if(0==read(sock,datas,TAILLE_MAX_MESSAGE+32)){
+      sprintf(datas,"Connexion interrompue\n");
+      affichier_haut(datas);
+      break;
+    }
+    result_read=errno;
+
+
+    if ((result_read != EWOULDBLOCK)&&(result_read != EAGAIN)){
+      str_to_tr(datas,&trame_read);
+      timeToSleep=1;
+      if(trame_read.type_message==quit){
+	write(sock,datas,TAILLE_MAX_MESSAGE+32);
+	sprintf(datas,"Fermeture de connexion (en toute tranquillité)\n");
+	affichier_haut(datas);
+	break;
+      }else
+	sprintf(datas,"%s",trame_read.message);	
+
+      affichier_haut(datas);
+    }
+
+    //Phase écriture
+    if(!(estVide_fifo(envoi))){
+
+      bzero(trame_write.message,TAILLE_MAX_MESSAGE);
+      timeToSleep=1;
+      defiler_fifo(envoi,trame_write.message);
+
+      if(0==strcmp("QUIT",trame_write.message))
+	trame_write.type_message=quit;
+            else if (0==strncasecmp("INFO",trame_write.message, 4)){
+                trame_write.type_message=annuaireInfo;
+                sprintf(trame_write.message, "%s", trame_write.message+strlen("INFO")+1);
+            }
+            else if(strncasecmp("ASK", trame_write.message, 3)==0){
+                sprintf(trame_write.message, "%s", trame_write.message+strlen("ASK")+1);
+                trame_write.type_message=annuaireAsk;
+            }
+            else if(strncasecmp("NEW", trame_write.message, 3)==0){
+                sprintf(trame_write.message, "%s", trame_write.message+strlen("NEW")+1);
+                trame_write.type_message=annuaireNew;
+            }
+            else if (strncasecmp("JOIN", trame_write.message, 4)==0){
+                sprintf(trame_write.message, "%s", trame_write.message+strlen("JOIN")+1);
+                trame_write.type_message=groupJoin;
+            }
+	
+	
+      trame_write.taille=strlen(trame_write.message);
+      tr_to_str(datas,trame_write);
+      write(sock,datas,TAILLE_MAX_MESSAGE+32);
+    }
+
+    usleep(timeToSleep);
+
+  }
+  sleep(1);
+  serveur=NULL;
+  supprimer_fifo(envoi);
+  close(sock);
+  
+  
+}
 
 
 void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-client
   fifo* envoi=(fifo*)envoy;
   int sock=envoi->sock;
-  int taille;
   trame trame_read;
   trame trame_write;
   trame trame1;
@@ -82,7 +162,7 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
   bzero(trame1.message,TAILLE_MAX_MESSAGE);
   strcpy(trame1.message,recu->pseudo);
   trame1.type_message=hello;
-  trame1.taille=sizeof(trame1);
+  trame1.taille=strlen(trame1.message);
   fcntl(sock,F_SETFL,fcntl(sock,F_GETFL)|O_NONBLOCK);
   
   tr_to_str(datas,trame1);
@@ -110,6 +190,11 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
       timeToSleep=1;
       if (trame_read.type_message==hello){
 	strcpy(envoi->pseudo,trame_read.message);
+	if(0==strncmp("Serveurd'annuaire",envoi->pseudo,17)){
+	  supprimer_par_pseudo(&envois,envoi->pseudo);
+	  connexion_serveur(envoi);
+	  return;
+	}
 	sprintf(datas,"%s vient de se connecter \n",envoi->pseudo);	
 
       }else if(trame_read.type_message==quit){
@@ -134,7 +219,7 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
 	trame_write.type_message=quit;
       else
 	trame_write.type_message=texte;
-      trame_write.taille=sizeof(trame_write);
+      trame_write.taille=strlen(trame_write.message);
       tr_to_str(datas,trame_write);
       write(sock,datas,TAILLE_MAX_MESSAGE+32);
     }
@@ -315,6 +400,7 @@ void envoi_a_tous(char* message){
 int main(int argc, char ** argv){
 
   recu=creer_fifo();
+  serveur=NULL;
   fifo* fifo_recherche;
   recu_depile=malloc(sizeof(pthread_cond_t));
   pthread_cond_init(recu_depile, NULL);
@@ -380,15 +466,25 @@ int main(int argc, char ** argv){
 	  
 	}else if(0==strncasecmp("/mp",datas,3)){
 	  sscanf(datas,"%*s %s",arg1);
-	  if(!rechercher_par_pseudo(&envois,arg1, &fifo_recherche)){
-	    sprintf(datas2,"%s : pseudo non trouvé",arg1);
-	  }else{
-	    enfiler_fifo(fifo_recherche,datas+5+strlen(arg1));
-	    sprintf(datas2,"[VOUS->%s] %s",arg1,datas+5+strlen(arg1));
+	    if(!rechercher_par_pseudo(&envois,arg1, &fifo_recherche)){
+	        sprintf(datas2,"%s : pseudo non trouvé",arg1);
+	    }else{
+	        enfiler_fifo(fifo_recherche,datas+5+strlen(arg1));
+	        sprintf(datas2,"[VOUS->%s] %s",arg1,datas+5+strlen(arg1));
 	    
 	  }
 	  
-	}else
+	}else if ((0==strncasecmp("/INFO",datas, 5)) || (strncasecmp("/ASK", datas, 4)==0) || (strncasecmp("/NEW", datas, 4)==0) || (strncasecmp("/JOIN", datas, 5)==0)){
+                if(serveur!=NULL)
+		  enfiler_fifo(serveur,datas+1);
+		else{
+		  sprintf(datas2,"Aucun serveur connu, la requête n'a pas aboutit");
+		}
+	 }else if((0==strncasecmp("/help",datas,5)) || (0==strncasecmp("/h",datas,2)) || (0==strncasecmp("/?",datas,2))){
+	   sprintf(datas2,"[AIDE]\n /quit : quitter le programme\n /me : retourne votre pseudo\n /connect <adresse ip> <port> : vous connecte à la personne indiquée\n /mp <pseudo> <message> : envoit un message privé à la personne indiquée");
+	   enfiler_fifo(recu,datas2);
+	   sprintf(datas2," /info : Liste tout ceux qui se sont enregistrés auprès du serveur d'annuaire, ainsi que la liste des groupes.\n /info <nom de groupe> : Liste les membres du groupe.\n /ask <pseudo> : demande l'adresse ip et le port de connexion d'une personne.\n /new <nom du groupe> : Crée un groupe.\n /join <nom du groupe> : Permet de rejoindre un groupe.");
+         }else
 	  sprintf(datas2,"La commande %s est inconnue.",datas);
       }else{
 	
