@@ -78,6 +78,7 @@ void connexion_serveur(fifo* envoi){
   
   while(1){
     bzero(trame_read.message,TAILLE_MAX_MESSAGE);
+    bzero(datas,TAILLE_MAX_MESSAGE+32);
     timeToSleep=1000;
 
     //Phase lecture
@@ -95,10 +96,12 @@ void connexion_serveur(fifo* envoi){
       timeToSleep=1;
       if(trame_read.type_message==quit){
 	write(sock,datas,TAILLE_MAX_MESSAGE+32);
+	bzero(datas,TAILLE_MAX_MESSAGE+32);
 	sprintf(datas,"Fermeture de connexion (en toute tranquillité)\n");
 	affichier_haut(datas);
 	break;
       }else
+	bzero(datas,TAILLE_MAX_MESSAGE+32);
 	sprintf(datas,"%s",trame_read.message);	
 
       affichier_haut(datas);
@@ -178,6 +181,7 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
     //Phase lecture
     errno=0;
     if(0==read(sock,datas,TAILLE_MAX_MESSAGE+32)){
+      bzero(datas,TAILLE_MAX_MESSAGE+32);
       sprintf(datas,"Connexion interrompue\n");
       affichier_haut(datas);
       break;
@@ -195,14 +199,17 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
 	  connexion_serveur(envoi);
 	  return;
 	}
+	bzero(datas,TAILLE_MAX_MESSAGE+32);
 	sprintf(datas,"%s vient de se connecter \n",envoi->pseudo);	
 
       }else if(trame_read.type_message==quit){
 	write(sock,datas,TAILLE_MAX_MESSAGE+32);
+	bzero(datas,TAILLE_MAX_MESSAGE+32);
 	sprintf(datas,"Fermeture de connexion (en toute tranquillité)\n");
 	affichier_haut(datas);
 	break;
       }else
+	bzero(datas,TAILLE_MAX_MESSAGE+32);
 	sprintf(datas,"[%s] %s",envoi->pseudo,trame_read.message);	
 
       affichier_haut(datas);
@@ -263,6 +270,7 @@ void connectTO(char *adresse, int port){	//Etablit une connexion vers un client 
 
    if ((hote_distant=gethostbyname(adresse))==(struct hostent *)NULL){
 	char reponse[BUFSIZ];
+	    bzero(reponse,BUFSIZ);
 	sprintf(reponse, "chat : hôte inconnu : %s", adresse);
 	affichier_haut(reponse);
 	return;
@@ -284,6 +292,7 @@ void connectTO(char *adresse, int port){	//Etablit une connexion vers un client 
     }
    else{
      char reponse[BUFSIZ];
+         bzero(reponse,BUFSIZ);
      sprintf(reponse,"Echec de connexion a %s %d\n", inet_ntoa(extremite_distante.sin_addr),ntohs(extremite_distante.sin_port));
 	affichier_haut(reponse);
   }
@@ -321,6 +330,8 @@ void * waitConnectFROM(){	//Attends d'autres clients pour connexion
  }
 
  char datas[200];
+     bzero(datas,200);
+
  sprintf(datas,"Ouverture d'une socket (n°%i) sur le port %i on mode connecté\n", sock, ntohs(extremite_locale.sin_port));
  affichier_haut(datas);
  //printf("extremite locale :\n sin_family = %d\n sin_addr.s_addr = %s\n sin_port = %d\n\n", extremite_locale.sin_family, inet_ntoa(extremite_locale.sin_addr), ntohs(extremite_locale.sin_port));
@@ -455,6 +466,7 @@ int main(int argc, char ** argv){
 	  sleep(1);
 	  exit(0);
 	}else if(0==strncasecmp("/me",datas,3)){
+	  bzero(datas2,TAILLE_MAX_MESSAGE+TAILLE_PSEUDO+32);
 	  sprintf(datas2,"Votre pseudo est %s",recu->pseudo);
 	  
 	}else if(0==strncasecmp("/connect",datas,8)){  
@@ -467,9 +479,11 @@ int main(int argc, char ** argv){
 	}else if(0==strncasecmp("/mp",datas,3)){
 	  sscanf(datas,"%*s %s",arg1);
 	    if(!rechercher_par_pseudo(&envois,arg1, &fifo_recherche)){
+	        bzero(datas2,TAILLE_MAX_MESSAGE+TAILLE_PSEUDO+32);
 	        sprintf(datas2,"%s : pseudo non trouvé",arg1);
 	    }else{
 	        enfiler_fifo(fifo_recherche,datas+5+strlen(arg1));
+      	        bzero(datas2,TAILLE_MAX_MESSAGE+TAILLE_PSEUDO+32);
 	        sprintf(datas2,"[VOUS->%s] %s",arg1,datas+5+strlen(arg1));
 	    
 	  }
@@ -478,18 +492,23 @@ int main(int argc, char ** argv){
                 if(serveur!=NULL)
 		  enfiler_fifo(serveur,datas+1);
 		else{
+		  bzero(datas2,TAILLE_MAX_MESSAGE+TAILLE_PSEUDO+32);
 		  sprintf(datas2,"Aucun serveur connu, la requête n'a pas aboutit");
 		}
 	 }else if((0==strncasecmp("/help",datas,5)) || (0==strncasecmp("/h",datas,2)) || (0==strncasecmp("/?",datas,2))){
+	   bzero(datas2,TAILLE_MAX_MESSAGE+TAILLE_PSEUDO+32);
 	   sprintf(datas2,"[AIDE]\n /quit : quitter le programme\n /me : retourne votre pseudo\n /connect <adresse ip> <port> : vous connecte à la personne indiquée\n /mp <pseudo> <message> : envoit un message privé à la personne indiquée");
 	   enfiler_fifo(recu,datas2);
+	   bzero(datas2,TAILLE_MAX_MESSAGE+TAILLE_PSEUDO+32);
 	   sprintf(datas2," /info : Liste tout ceux qui se sont enregistrés auprès du serveur d'annuaire, ainsi que la liste des groupes.\n /info <nom de groupe> : Liste les membres du groupe.\n /ask <pseudo> : demande l'adresse ip et le port de connexion d'une personne.\n /new <nom du groupe> : Crée un groupe.\n /join <nom du groupe> : Permet de rejoindre un groupe.");
-         }else
+         }else{
+	  bzero(datas2,TAILLE_MAX_MESSAGE+TAILLE_PSEUDO+32);
 	  sprintf(datas2,"La commande %s est inconnue.",datas);
+	}
       }else{
 	
 	envoi_a_tous(datas);
-	
+	    bzero(datas2,TAILLE_MAX_MESSAGE+TAILLE_PSEUDO+32);
 	sprintf(datas2,"[VOUS] %s",datas);
       }
       
