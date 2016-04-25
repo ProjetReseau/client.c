@@ -64,6 +64,63 @@ void regen_win(WINDOW **haut, WINDOW **bas){
 }
 
 
+int join(char *nom_groupe,int sock){
+	trame trame_read;
+  trame trame_write;
+  char reponse_join[TAILLE_MAX_MESSAGE+32];
+  cher reponse_ask[TAILLE_MAX_MESSAGE];
+  char *pointeur_lecture;
+  char nom[TAILLE_PSEUDO];
+  char ip[16];
+  char port[6];
+  
+  sprintf(trame_write.message, "%s", nom_groupe);
+  trame_write.type_message=groupJoin;
+  
+  trame_write.taille=strlen(trame_write.message);
+  tr_to_str(reponse_join,trame_write);
+  write(sock,reponse_join,TAILLE_MAX_MESSAGE+32);
+  
+  usleep(10000);
+  read(sock,reponse_join,TAILLE_MAX_MESSAGE+32);
+  str_to_tr(reponse_join,&trame_read);
+  if(trame_read.message[0]!=0){
+	  return -1;
+  }
+  
+  
+  
+  continuer=1;
+  sprintf(reponse_join,"%s",trame_read.message)
+  pointeur_lecture=1+strchr(reponse_join,'\n');
+  while(continuer){
+	  bzero(nom,TAILLE_PSEUDO);
+	  sscanf(pointeur_lecture,"%[^\n]",nom);
+	  if(nom[0]==0){
+		  continuer=0;
+	  }else{
+		  sprintf(trame_write.message,"%s",nom);
+		  trame_write.type_message=annuaireAsk;
+		  trame_write.taille=strlen(trame_write.message);
+		  
+		  tr_to_str(reponse_ask,trame_write);
+		  write(sock,reponse_ask,TAILLE_MAX_MESSAGE+32);
+  
+		  usleep(10000);
+		  read(sock,reponse_ask,TAILLE_MAX_MESSAGE+32);
+		  str_to_tr(reponse_ask,&trame_read);
+		  
+		  sscanf(trame_read.message,"%*s %s %s",ip,port);
+		  connectTO(ip,atoi(port));
+	  }
+  }
+  
+  
+  return 0;
+  
+}
+
+
 void connexion_serveur(fifo* envoi){
   
   int sock=envoi->sock;
@@ -129,8 +186,9 @@ void connexion_serveur(fifo* envoi){
                 trame_write.type_message=annuaireNew;
             }
             else if (strncasecmp("JOIN", trame_write.message, 4)==0){
-                sprintf(trame_write.message, "%s", trame_write.message+strlen("JOIN")+1);
-                trame_write.type_message=groupJoin;
+                /*sprintf(trame_write.message, "%s", trame_write.message+strlen("JOIN")+1);
+                trame_write.type_message=groupJoin;*/
+				join(trame_write.message+strlen("JOIN")+1,sock);
             }
 	
 	
