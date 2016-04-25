@@ -161,9 +161,10 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
   ssize_t result_read;
   useconds_t timeToSleep=100;
 
-  //Dis "bonjour !" en envoyant son pseudo
+  //Dis "bonjour !" en envoyant son pseudo et son port
   bzero(trame1.message,TAILLE_MAX_MESSAGE);
-  strcpy(trame1.message,recu->pseudo);
+  //strcpy(trame1.message,recu->pseudo);
+  sprintf(trame1.message,"%s %s",recu->pseudo, recu->ext_dist);
   trame1.type_message=hello;
   trame1.taille=strlen(trame1.message);
   fcntl(sock,F_SETFL,fcntl(sock,F_GETFL)|O_NONBLOCK);
@@ -191,12 +192,13 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
       str_to_tr(datas,&trame_read);
       timeToSleep=1;
       if (trame_read.type_message==hello){
-					strcpy(envoi->pseudo,trame_read.message);
-			if(0==strncmp("Serveurd'annuaire",envoi->pseudo,17)){
-	  	supprimer_par_pseudo(&envois,envoi->pseudo);
-	  	connexion_serveur(envoi);
-	  	return;
-			}
+	//strcpy(envoi->pseudo,trame_read.message);
+	sscanf(trame_read.message, "%s", envoi->pseudo);
+	if(0==strncmp("Serveurd'annuaire",envoi->pseudo,17)){
+	  supprimer_par_pseudo(&envois,envoi->pseudo);
+	  connexion_serveur(envoi);
+	  return;
+	}
 
 	bzero(datas,TAILLE_MAX_MESSAGE+32);
 	sprintf(datas,"%s vient de se connecter \n",envoi->pseudo);
@@ -240,7 +242,6 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
 
 
 }
-
 
 
 void connectTO(char *adresse, int port){	//Etablit une connexion vers un client attendant
@@ -329,8 +330,9 @@ void * waitConnectFROM(){	//Attends d'autres clients pour connexion
  }
 
  char datas[200];
-     bzero(datas,200);
-
+ bzero(datas,200);
+ bzero(recu->ext_dist,25);
+ sprintf(recu->ext_dist, "%d", ntohs(extremite_locale.sin_port));
  sprintf(datas,"Ouverture d'une socket (n°%i) sur le port %i on mode connecté\n", sock, ntohs(extremite_locale.sin_port));
  affichier_haut(datas);
  //printf("extremite locale :\n sin_family = %d\n sin_addr.s_addr = %s\n sin_port = %d\n\n", extremite_locale.sin_family, inet_ntoa(extremite_locale.sin_addr), ntohs(extremite_locale.sin_port));
@@ -444,14 +446,15 @@ int main(int argc, char ** argv){
   scrollok(haut,TRUE);
   wmove(haut, LINES-8,0);
   refresh();
-
+  
+  
   pthread_create(&th,NULL,recive,(void*) haut);
+  pthread_create(&th,NULL,waitConnectFROM,NULL);
+  
   sleep(1);
   for(agc=2;agc<argc;agc+=2)
       connectTO(argv[(agc-1)], atoi(argv[agc]));
 
-
-  pthread_create(&th,NULL,waitConnectFROM,NULL);
 
   while (1){
 
@@ -534,9 +537,6 @@ int main(int argc, char ** argv){
 
   return EXIT_SUCCESS;
 }
-
-
-
 
 
 int saisir_texte(char *chaine, int longueur){	//un fgets perso
