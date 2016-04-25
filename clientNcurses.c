@@ -34,10 +34,10 @@ liste envois;
 int saisir_texte(char *chaine, int longueur);
 
 void affichier_haut(char* datas){
-  
+
       enfiler_fifo(recu, datas);
       pthread_cond_signal(recu_depile);
-  
+
 }
 
 void dessine_box(void){
@@ -65,7 +65,7 @@ void regen_win(WINDOW **haut, WINDOW **bas){
 
 
 void connexion_serveur(fifo* envoi){
-  
+
   int sock=envoi->sock;
   serveur=envoi;
   trame trame_read;
@@ -73,9 +73,9 @@ void connexion_serveur(fifo* envoi){
   char datas[TAILLE_MAX_MESSAGE+32];
   ssize_t result_read;
   useconds_t timeToSleep=100;
-  
+
   affichier_haut("Connecté au serveur d'annuaire.\n");
-  
+
   while(1){
     bzero(trame_read.message,TAILLE_MAX_MESSAGE);
     bzero(datas,TAILLE_MAX_MESSAGE+32);
@@ -102,7 +102,7 @@ void connexion_serveur(fifo* envoi){
 	break;
       }else
 	bzero(datas,TAILLE_MAX_MESSAGE+32);
-	sprintf(datas,"%s",trame_read.message);	
+	sprintf(datas,"%s",trame_read.message);
 
       affichier_haut(datas);
     }
@@ -132,8 +132,8 @@ void connexion_serveur(fifo* envoi){
                 sprintf(trame_write.message, "%s", trame_write.message+strlen("JOIN")+1);
                 trame_write.type_message=groupJoin;
             }
-	
-	
+
+
       trame_write.taille=strlen(trame_write.message);
       tr_to_str(datas,trame_write);
       write(sock,datas,TAILLE_MAX_MESSAGE+32);
@@ -146,8 +146,8 @@ void connexion_serveur(fifo* envoi){
   serveur=NULL;
   supprimer_fifo(envoi);
   close(sock);
-  
-  
+
+
 }
 
 
@@ -167,11 +167,9 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
   trame1.type_message=hello;
   trame1.taille=strlen(trame1.message);
   fcntl(sock,F_SETFL,fcntl(sock,F_GETFL)|O_NONBLOCK);
-  
+
   tr_to_str(datas,trame1);
   write(sock,datas,TAILLE_MAX_MESSAGE+32);
-
-
 
 
   while(1){
@@ -193,14 +191,15 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
       str_to_tr(datas,&trame_read);
       timeToSleep=1;
       if (trame_read.type_message==hello){
-	strcpy(envoi->pseudo,trame_read.message);
-	if(0==strncmp("Serveurd'annuaire",envoi->pseudo,17)){
-	  supprimer_par_pseudo(&envois,envoi->pseudo);
-	  connexion_serveur(envoi);
-	  return;
-	}
+					strcpy(envoi->pseudo,trame_read.message);
+			if(0==strncmp("Serveurd'annuaire",envoi->pseudo,17)){
+	  	supprimer_par_pseudo(&envois,envoi->pseudo);
+	  	connexion_serveur(envoi);
+	  	return;
+			}
+
 	bzero(datas,TAILLE_MAX_MESSAGE+32);
-	sprintf(datas,"%s vient de se connecter \n",envoi->pseudo);	
+	sprintf(datas,"%s vient de se connecter \n",envoi->pseudo);
 
       }else if(trame_read.type_message==quit){
 	write(sock,datas,TAILLE_MAX_MESSAGE+32);
@@ -208,9 +207,9 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
 	sprintf(datas,"Fermeture de connexion (en toute tranquillité)\n");
 	affichier_haut(datas);
 	break;
-      }else
+}else{
 	bzero(datas,TAILLE_MAX_MESSAGE+32);
-	sprintf(datas,"[%s] %s",envoi->pseudo,trame_read.message);	
+	sprintf(datas,"[%s] %s",envoi->pseudo,trame_read.message);}
 
       affichier_haut(datas);
     }
@@ -223,12 +222,12 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
       defiler_fifo(envoi,trame_write.message);
 
       if(0==strcmp("QUIT",trame_write.message))
-	trame_write.type_message=quit;
+				trame_write.type_message=quit;
       else
-	trame_write.type_message=texte;
-      trame_write.taille=strlen(trame_write.message);
-      tr_to_str(datas,trame_write);
-      write(sock,datas,TAILLE_MAX_MESSAGE+32);
+				trame_write.type_message=texte;
+	      trame_write.taille=strlen(trame_write.message);
+	      tr_to_str(datas,trame_write);
+	      write(sock,datas,TAILLE_MAX_MESSAGE+32);
     }
 
     usleep(timeToSleep);
@@ -238,8 +237,8 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
   supprimer_par_pseudo(&envois,envoi->pseudo);
   supprimer_fifo(envoi);
   close(sock);
-  
-  
+
+
 }
 
 
@@ -356,7 +355,7 @@ void * waitConnectFROM(){	//Attends d'autres clients pour connexion
     envoy=creer_fifo();
     envoy->sock=ear;
     ajouter_liste(&envois,envoy);
-    
+
 
    pthread_create(&th,NULL,connexion,(void*) envoy);
 
@@ -367,11 +366,11 @@ void * waitConnectFROM(){	//Attends d'autres clients pour connexion
 
 
 void * recive(void *haut){
-  
+
   pthread_mutex_t *mutex=malloc(sizeof(pthread_mutex_t));
   pthread_mutex_init(mutex,NULL);
   char datas[TAILLE_MAX_MESSAGE+TAILLE_PSEUDO+32];
-    
+
   while(1){
 
     pthread_cond_wait (recu_depile,mutex);
@@ -380,31 +379,32 @@ void * recive(void *haut){
       bzero(datas,TAILLE_MAX_MESSAGE+TAILLE_PSEUDO+32);
       defiler_fifo(recu, datas);
       wprintw(haut,"%s\n",datas);
-      
+			//wprintw(haut,"Affichage\n");
+
     }
-    
-  
+
+
   wnoutrefresh(haut);
   wnoutrefresh(stdscr);
   doupdate();
   }
-  
+
 }
 
 
 void envoi_a_tous(char* message){
-  
+
   liste_elmt* current;
   int i;
-  
+
    current=envois.premier;
-	
+
     for(i=0;i<envois.taille;i++){
       enfiler_fifo(current->file, message);
       current=current->suiv;
-      
+
     }
-  
+
 }
 
 
@@ -417,7 +417,7 @@ int main(int argc, char ** argv){
   pthread_cond_init(recu_depile, NULL);
   envois.mutex_liste=malloc(sizeof(pthread_mutex_t));
   pthread_mutex_init(envois.mutex_liste,NULL);
-  
+
   char datas[TAILLE_MAX_MESSAGE];
   char datas2[TAILLE_MAX_MESSAGE+TAILLE_PSEUDO+32];
   char arg1[TAILLE_PSEUDO];
@@ -439,12 +439,12 @@ int main(int argc, char ** argv){
   haut= subwin(stdscr, LINES-7,COLS-2, 1, 1);
   bas= subwin(stdscr, 4,COLS-2, LINES-5, 1);
   dessine_box();
-	
+
   echo();
   scrollok(haut,TRUE);
   wmove(haut, LINES-8,0);
   refresh();
- 
+
   pthread_create(&th,NULL,recive,(void*) haut);
   sleep(1);
   for(agc=2;agc<argc;agc+=2)
@@ -454,13 +454,13 @@ int main(int argc, char ** argv){
   pthread_create(&th,NULL,waitConnectFROM,NULL);
 
   while (1){
-    
+
     bzero(datas,TAILLE_MAX_MESSAGE);
 
     if (KEY_RESIZE!=mvwgetstr(bas, 0, 0, (char*) &datas)){
-      
+
       if(datas[0]=='/'){
-	
+
 	if(0==strncasecmp("/quit",datas,5)){
 	  envoi_a_tous("QUIT");
 	  sleep(1);
@@ -468,14 +468,14 @@ int main(int argc, char ** argv){
 	}else if(0==strncasecmp("/me",datas,3)){
 	  bzero(datas2,TAILLE_MAX_MESSAGE+TAILLE_PSEUDO+32);
 	  sprintf(datas2,"Votre pseudo est %s",recu->pseudo);
-	  
-	}else if(0==strncasecmp("/connect",datas,8)){  
+
+	}else if(0==strncasecmp("/connect",datas,8)){
 	  arg1[0]='\0';
 	  *datas2='\0';
 	  sscanf(datas,"%*s %s %s",arg1,datas2);
 	  connectTO(arg1,atoi(datas2));
 	  *datas2='\0';
-	  
+
 	}else if(0==strncasecmp("/mp",datas,3)){
 	  sscanf(datas,"%*s %s",arg1);
 	    if(!rechercher_par_pseudo(&envois,arg1, &fifo_recherche)){
@@ -485,9 +485,12 @@ int main(int argc, char ** argv){
 	        enfiler_fifo(fifo_recherche,datas+5+strlen(arg1));
       	        bzero(datas2,TAILLE_MAX_MESSAGE+TAILLE_PSEUDO+32);
 	        sprintf(datas2,"[VOUS->%s] %s",arg1,datas+5+strlen(arg1));
-	    
+			}
 	  }
-	  
+		else if(0==strncasecmp("/change",datas,7)){
+			sscanf(datas,"%*s %s",arg1);
+			bzero(recu->pseudo,TAILLE_PSEUDO);
+			strcpy(recu->pseudo, arg1);
 	}else if ((0==strncasecmp("/INFO",datas, 5)) || (strncasecmp("/ASK", datas, 4)==0) || (strncasecmp("/NEW", datas, 4)==0) || (strncasecmp("/JOIN", datas, 5)==0)){
                 if(serveur!=NULL)
 		  enfiler_fifo(serveur,datas+1);
@@ -506,12 +509,16 @@ int main(int argc, char ** argv){
 	  sprintf(datas2,"La commande %s est inconnue.",datas);
 	}
       }else{
-	
+
 	envoi_a_tous(datas);
-	    bzero(datas2,TAILLE_MAX_MESSAGE+TAILLE_PSEUDO+32);
+	bzero(datas2,TAILLE_MAX_MESSAGE+TAILLE_PSEUDO+32);
+	/*snprintf(datas, TAILLE_MAX_MESSAGE+TAILLE_PSEUDO+32, "[VOUS] %s", datas);
+	datas2[TAILLE_MAX_MESSAGE+TAILLE_PSEUDO+31]='\0';
+  */
+
 	sprintf(datas2,"[VOUS] %s",datas);
       }
-      
+
       affichier_haut(datas2);
     }
 
@@ -522,7 +529,7 @@ int main(int argc, char ** argv){
 
   }
 
-			
+
 	endwin();
 
   return EXIT_SUCCESS;
@@ -546,7 +553,3 @@ int saisir_texte(char *chaine, int longueur){	//un fgets perso
   }
   else return 0;
 }
-
-
-
-
