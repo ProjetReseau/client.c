@@ -14,6 +14,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <ncurses.h>
+#include <sys/stat.h>
 
 
 #ifndef EWOULDBLOCK
@@ -23,7 +24,7 @@
 
 
 
-static char pseudo[TAILLE_PSEUDO];
+//static char pseudo[TAILLE_PSEUDO];
 static pthread_t th;
 static pthread_cond_t *recu_depile;
 
@@ -32,6 +33,10 @@ fifo *recu, *serveur;
 liste envois;
 
 int saisir_texte(char *chaine, int longueur);
+void send_file(int sock, char * chemin);
+void receive_file(trame trame_read, int nchar_write, int taille_fichier, char *nom, int * RECU_A);
+void recup_nom(char *chemin, char* nom);
+void make_file_p(trame * trame_write, char * chemin);
 
 void affichier_haut(char* datas){
 
@@ -160,17 +165,24 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
   char datas[TAILLE_MAX_MESSAGE+32];
   ssize_t result_read;
   useconds_t timeToSleep=100;
+  char name_file_r[50];
+  char nom[50];
+  int taille_file_r;
+  char chemin[100];
+  int ENVOYE_P=0;
+  int RECU_A=0;
 
-  //Dis "bonjour !" en envoyant son pseudo et son port
+  //Dis "bonjour !" en envoyant son pseudo
   bzero(trame1.message,TAILLE_MAX_MESSAGE);
-  //strcpy(trame1.message,recu->pseudo);
-  sprintf(trame1.message,"%s %s",recu->pseudo, recu->ext_dist);
+  strcpy(trame1.message,recu->pseudo);
   trame1.type_message=hello;
   trame1.taille=strlen(trame1.message);
   fcntl(sock,F_SETFL,fcntl(sock,F_GETFL)|O_NONBLOCK);
-
+  
   tr_to_str(datas,trame1);
   write(sock,datas,TAILLE_MAX_MESSAGE+32);
+
+
 
 
   while(1){
@@ -192,28 +204,44 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
       str_to_tr(datas,&trame_read);
       timeToSleep=1;
       if (trame_read.type_message==hello){
-	//strcpy(envoi->pseudo,trame_read.message);
-	sscanf(trame_read.message, "%s", envoi->pseudo);
+	strcpy(envoi->pseudo,trame_read.message);
 	if(0==strncmp("Serveurd'annuaire",envoi->pseudo,17)){
 	  supprimer_par_pseudo(&envois,envoi->pseudo);
 	  connexion_serveur(envoi);
 	  return;
 	}
-
 	bzero(datas,TAILLE_MAX_MESSAGE+32);
 	sprintf(datas,"%s vient de se connecter \n",envoi->pseudo);
+	affichier_haut(datas);	
 
-      }else if(trame_read.type_message==quit){
+      }
+	else if ((trame_read.type_message==fileTransfert) && (RECU_A==1)){
+		receive_file(trame_read,trame_read.taille,taille_file_r,name_file_r,&RECU_A);		
+	}
+	else if (trame_read.type_message==fileProposition){
+		sscanf(trame_read.message,"%i %s", &taille_file_r, name_file_r);
+		sprintf(datas, "Proposition d'envoi de %s par %s\nSi vous souhaitez recevoir ce fichier, tapez 'file_p_ok'", name_file_r, envoi->pseudo);
+		affichier_haut(datas);
+	}
+	else if ((trame_read.type_message==fileAcceptation) && (ENVOYE_P==1)){
+		sprintf(datas,"%s a accepté de recevoir le fichier", envoi->pseudo);
+		affichier_haut(datas);
+		send_file(sock, chemin);
+		ENVOYE_P=0;
+	}	
+	else if(trame_read.type_message==quit){
 	write(sock,datas,TAILLE_MAX_MESSAGE+32);
 	bzero(datas,TAILLE_MAX_MESSAGE+32);
-	sprintf(datas,"Fermeture de connexion (en toute tranquillité)\n");
+	sprintf(datas,"%s a été déconnecté.\n", envoi->pseudo);
 	affichier_haut(datas);
 	break;
-}else{
-	bzero(datas,TAILLE_MAX_MESSAGE+32);
-	sprintf(datas,"[%s] %s",envoi->pseudo,trame_read.message);}
+	}
+	else {
+	  bzero(datas,TAILLE_MAX_MESSAGE+32);
+	  sprintf(datas,"[%s] %s",envoi->pseudo,trame_read.message);	
+ 	  affichier_haut(datas); 
+	}
 
-      affichier_haut(datas);
     }
 
     //Phase écriture
@@ -223,13 +251,26 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
       timeToSleep=1;
       defiler_fifo(envoi,trame_write.message);
 
-      if(0==strcmp("QUIT",trame_write.message))
-				trame_write.type_message=quit;
-      else
-				trame_write.type_message=texte;
-	      trame_write.taille=strlen(trame_write.message);
-	      tr_to_str(datas,trame_write);
-	      write(sock,datas,TAILLE_MAX_MESSAGE+32);
+      recup_nom(trame_write.message,nom);
+
+      if (strcmp(trame_write.message,nom)!=0){
+	strcpy(chemin,trame_write.message);
+	make_file_p(&trame_write, chemin);
+	ENVOYE_P=1;
+      } 
+
+      else if(0==strcmp("QUIT",trame_write.message))
+	trame_write.type_message=quit;
+      else if (strcmp("file_p_ok", trame_write.message)==0){
+	bzero(trame_write.message, TAILLE_MAX_MESSAGE);
+	trame_write.type_message=fileAcceptation;
+	RECU_A=1;
+	}
+      else trame_write.type_message=texte;
+      
+      trame_write.taille=strlen(trame_write.message);
+      tr_to_str(datas,trame_write);
+      write(sock,datas,TAILLE_MAX_MESSAGE+32);
     }
 
     usleep(timeToSleep);
@@ -239,9 +280,10 @@ void * connexion(void* envoy){	//Thread de connexion, 1 par connexion client-cli
   supprimer_par_pseudo(&envois,envoi->pseudo);
   supprimer_fifo(envoi);
   close(sock);
-
-
+  
+  
 }
+
 
 
 void connectTO(char *adresse, int port){	//Etablit une connexion vers un client attendant
@@ -424,7 +466,7 @@ int main(int argc, char ** argv){
   char datas2[TAILLE_MAX_MESSAGE+TAILLE_PSEUDO+32];
   char arg1[TAILLE_PSEUDO];
   int agc;
-  int i;
+  //int i;
   WINDOW *haut, *bas;
 
 
@@ -490,11 +532,12 @@ int main(int argc, char ** argv){
 	        sprintf(datas2,"[VOUS->%s] %s",arg1,datas+5+strlen(arg1));
 			}
 	  }
-		else if(0==strncasecmp("/change",datas,7)){
+	    else if(0==strncasecmp("/change",datas,7)){
 			sscanf(datas,"%*s %s",arg1);
 			bzero(recu->pseudo,TAILLE_PSEUDO);
 			strcpy(recu->pseudo, arg1);
-	}else if ((0==strncasecmp("/INFO",datas, 5)) || (strncasecmp("/ASK", datas, 4)==0) || (strncasecmp("/NEW", datas, 4)==0) || (strncasecmp("/JOIN", datas, 5)==0)){
+	    }	
+	    else if ((0==strncasecmp("/INFO",datas, 5)) || (strncasecmp("/ASK", datas, 4)==0) || (strncasecmp("/NEW", datas, 4)==0) || (strncasecmp("/JOIN", datas, 5)==0)){
                 if(serveur!=NULL)
 		  enfiler_fifo(serveur,datas+1);
 		else{
@@ -503,11 +546,20 @@ int main(int argc, char ** argv){
 		}
 	 }else if((0==strncasecmp("/help",datas,5)) || (0==strncasecmp("/h",datas,2)) || (0==strncasecmp("/?",datas,2))){
 	   bzero(datas2,TAILLE_MAX_MESSAGE+TAILLE_PSEUDO+32);
-	   sprintf(datas2,"[AIDE]\n /quit : quitter le programme\n /me : retourne votre pseudo\n /connect <adresse ip> <port> : vous connecte à la personne indiquée\n /mp <pseudo> <message> : envoit un message privé à la personne indiquée");
+	   sprintf(datas2,"[AIDE]\n /quit : quitter le programme\n /me : retourne votre pseudo\n /connect <adresse ip> <port> : vous connecte à la personne indiquée\n /mp <pseudo> <message> : envoie un message privé à la personne indiquée\n /send <pseudo> <chemin>: envoie le fichier correspondant à chemin à la personne indiquée");
 	   enfiler_fifo(recu,datas2);
 	   bzero(datas2,TAILLE_MAX_MESSAGE+TAILLE_PSEUDO+32);
 	   sprintf(datas2," /info : Liste tout ceux qui se sont enregistrés auprès du serveur d'annuaire, ainsi que la liste des groupes.\n /info <nom de groupe> : Liste les membres du groupe.\n /ask <pseudo> : demande l'adresse ip et le port de connexion d'une personne.\n /new <nom du groupe> : Crée un groupe.\n /join <nom du groupe> : Permet de rejoindre un groupe.");
-         }else{
+         }
+	    else if (0==strncasecmp("/send",datas,5)){
+		sscanf(datas,"%*s %s %s", arg1, datas2);
+		if (rechercher_par_pseudo(&envois,arg1,&fifo_recherche)){
+			enfiler_fifo(fifo_recherche, datas+7+strlen(arg1));
+			bzero(datas2, TAILLE_MAX_MESSAGE+TAILLE_PSEUDO+32);
+			sprintf(datas2, "[VOUS->%s] Proposition d'envoi de %s", arg1, datas+7+strlen(arg1));
+		}
+	}
+	  else{
 	  bzero(datas2,TAILLE_MAX_MESSAGE+TAILLE_PSEUDO+32);
 	  sprintf(datas2,"La commande %s est inconnue.",datas);
 	}
@@ -553,3 +605,118 @@ int saisir_texte(char *chaine, int longueur){	//un fgets perso
   }
   else return 0;
 }
+
+void make_file_p(trame * trame_write, char * chemin){
+
+  struct stat fichier;
+  char nom[30];
+
+  recup_nom(chemin,nom);
+
+  lstat(chemin,&fichier);
+
+  trame_write->type_message=fileProposition;
+  sprintf(trame_write->message,"%i %s", (int)fichier.st_size,nom);
+  trame_write->taille=strlen(trame_write->message);
+
+}
+
+void send_file(int sock, char* chemin){
+	
+	FILE * file;
+	char buffer[TAILLE_MAX_MESSAGE+32];
+	trame trame_write;
+//	struct stat fichier;
+	int nchar=0;
+	int nwrite=0;
+	int size_tot=0;
+//	int data_send=0;
+	char datas[TAILLE_MAX_MESSAGE+32];
+
+	file=fopen(chemin, "r");
+
+	if (file==NULL){
+		printf("Erreur fopen\n");
+		exit(EXIT_FAILURE);
+	}
+
+	while ((nchar=fread(trame_write.message,sizeof(char),TAILLE_MAX_MESSAGE,file))){	
+		trame_write.type_message=fileTransfert;
+		trame_write.taille=nchar;
+		tr_to_str(buffer,trame_write);
+		size_tot=trame_write.taille+sizeof(trame_write.taille)+sizeof(trame_write.type_message);
+		nwrite=write(sock,buffer,size_tot);
+		if (nwrite==-1){
+			perror("Erreur write: ");
+		}
+		/*if (nwrite!=size_tot){
+			fseek(file,-nchar,SEEK_CUR);
+		}
+		else data_send+=nchar;*/
+		sleep(1);
+		bzero(buffer,TAILLE_MAX_MESSAGE+32);
+		bzero(trame_write.message,TAILLE_MAX_MESSAGE);	
+	}
+	sprintf(datas, "Fichier envoyé.");
+	affichier_haut(datas);	
+	fclose(file);
+
+}
+
+void recup_nom(char *chemin, char *nom){
+	
+  char *ptr=NULL;
+
+  ptr=strchr(chemin,'\0');
+
+  if (ptr==NULL){
+	printf("Chemin invalide\n");
+  }
+
+  while ((*(ptr-1)!='/') && (ptr!=chemin)){
+	ptr--;
+  }
+
+  strcpy(nom,ptr);
+
+}
+
+void receive_file(trame trame_read, int nchar, int taille_fichier, char * nom, int * RECU_A){
+
+  static  FILE *dest=NULL;
+  int taille_re=taille_fichier;
+  int taille_w=0;
+  static int taille_w2=0;
+  static int ouvert=0;
+  char chemin_dest[50];
+  char datas[TAILLE_MAX_MESSAGE+32];
+
+  sprintf(chemin_dest,"./%s",nom);
+
+  if (!ouvert){
+	  dest=fopen(chemin_dest,"w");
+	  ouvert=1;
+  }
+
+  if (dest==NULL){
+  	printf("Erreur open\n");
+  	exit(EXIT_FAILURE);
+  }
+
+  sprintf(datas, "Reception du fichier %s....\n", nom);
+  affichier_haut(datas);
+  taille_w=fwrite(trame_read.message,sizeof(char),nchar,dest);
+  taille_w2+=taille_w;
+
+  if (taille_re==taille_w2){
+  	fclose(dest);
+	RECU_A=0;
+  	sprintf(datas, "Fichier %s fermé\n", nom);
+	affichier_haut(datas);
+	taille_re=0;
+	taille_w2=0;
+	ouvert=0;
+  }
+
+}
+
