@@ -37,6 +37,7 @@ int send_file(int sock, char * chemin);
 int receive_file(trame trame_read, int nchar_write, int taille_fichier, char *nom, int * RECU_A);
 void recup_nom(char *chemin, char* nom);
 void make_file_p(trame * trame_write, char * chemin);
+void connectTO(char *adresse, int port);
 
 void afficher_haut(char* datas){   //affiche à l'écran le contenu de datas
 
@@ -708,7 +709,7 @@ int send_file(int sock, char* chemin){    //permet d'envoyer un fichier
 		return(EXIT_FAILURE);
 	}
 
-	while ((nchar=fread(trame_write.message,sizeof(char),TAILLE_MAX_MESSAGE,file)))}
+	while ((nchar=fread(trame_write.message,sizeof(char),TAILLE_MAX_MESSAGE,file))){
 		trame_write.type_message=fileTransfert;
 		trame_write.taille=nchar;
 		tr_to_str(buffer,trame_write);
