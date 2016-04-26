@@ -37,6 +37,7 @@ void send_file(int sock, char * chemin);
 void receive_file(trame trame_read, int nchar_write, int taille_fichier, char *nom, int * RECU_A);
 void recup_nom(char *chemin, char* nom);
 void make_file_p(trame * trame_write, char * chemin);
+void connectTO(char *adresse, int port);
 
 void affichier_haut(char* datas){
 
@@ -68,6 +69,76 @@ void regen_win(WINDOW **haut, WINDOW **bas){
 
 }
 
+
+int join(char *nom_groupe,int sock){
+	trame trame_read;
+  trame trame_write;
+  char reponse_info[TAILLE_MAX_MESSAGE+32];
+  char reponse_ask[TAILLE_MAX_MESSAGE];
+  char *pointeur_lecture;
+  char nom[TAILLE_PSEUDO];
+  char ip[16];
+  char port[6];
+  
+  sprintf(trame_write.message, "%s", nom_groupe);
+  trame_write.type_message=groupJoin;
+  
+  trame_write.taille=strlen(trame_write.message);
+  tr_to_str(reponse_info,trame_write);
+  write(sock,reponse_info,TAILLE_MAX_MESSAGE+32);
+  
+  usleep(10000);
+  
+  read(sock,reponse_info,TAILLE_MAX_MESSAGE+32);
+  str_to_tr(reponse_info,&trame_read);
+  
+  if(strcmp("Ok",trame_read.message)!=0){
+	  return -1;
+  }
+  
+  trame_write.type_message=annuaireInfo;
+  tr_to_str(reponse_info,trame_write);
+  write(sock,reponse_info,TAILLE_MAX_MESSAGE+32);
+  
+  usleep(10000);
+  read(sock,reponse_info,TAILLE_MAX_MESSAGE+32);
+  str_to_tr(reponse_info,&trame_read);
+  
+  
+  
+  
+  int continuer=1;
+  sprintf(reponse_info,"%s",trame_read.message);
+  pointeur_lecture=1+strchr(reponse_info,'\n');
+  while(continuer){
+	  bzero(nom,TAILLE_PSEUDO);
+	  sscanf(pointeur_lecture,"%[^\n]",nom);
+	  affichier_haut("Connect à");
+	  affichier_haut(nom);
+	  if((strcmp(recu->pseudo,nom))==0){
+		  continuer=0;
+	  }else{
+		  sprintf(trame_write.message,"%s",nom);
+		  trame_write.type_message=annuaireAsk;
+		  trame_write.taille=strlen(trame_write.message);
+		  
+		  tr_to_str(reponse_ask,trame_write);
+		  write(sock,reponse_ask,TAILLE_MAX_MESSAGE+32);
+  
+		  usleep(10000);
+		  read(sock,reponse_ask,TAILLE_MAX_MESSAGE+32);
+		  str_to_tr(reponse_ask,&trame_read);
+		  
+		  sscanf(trame_read.message,"%*s %s %s",ip,port);
+		  connectTO(ip,atoi(port));
+		  pointeur_lecture+=strlen(nom)+1;
+	  }
+  }
+  
+  
+  return 0;
+  
+}
 
 void connexion_serveur(fifo* envoi){
 
